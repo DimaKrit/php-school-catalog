@@ -1,72 +1,58 @@
 <?php
 
-namespace App;
+namespace App\Controllers;
 
-use App\Http\RequestInterface;
-use App\Http\RouteInterface;
-use App\Http\RouterInterface;
-use App\Views\ViewInterface;
+use App\Database\Query;
+use App\Views\RedirectView;
+use App\Views\TemplateView;
 
-class Application
+class FormController
 {
-	/**
-	 * @var RouterInterface
-	 */
-	protected $router;
-
-	public function __construct(RouterInterface $router)
+	public function index($params = [])
 	{
-		$this->router = $router;
+		$query = new Query;
+		$forms = $query->getList("SELECT * FROM forms");
+
+		return new TemplateView('form_index', [
+			'title' => 'My awesome page',
+			'forms' => $forms
+		]);
 	}
 
-	public function handleRequest(RequestInterface $request)
+	public function view($params = [])
 	{
-		$route = $this->router->resolve($request);
-		$controller = $this->resolveControllerClass($route);
-		$action = $this->resolveControllerAction($route, $controller);
+		$query = new Query();
+		$form = $query->getRow(
+			"SELECT * FROM forms WHERE id = ?",
+			[$params['id']]
+		);
 
-		$result = $this->runControllerAction($controller, $action, $request);
-		$this->render($result);
+		return new TemplateView('form_view', [
+			'form' => $form
+		]);
 	}
 
-	protected function resolveControllerClass(RouteInterface $route)
+	public function create($params, $post)
 	{
-		$class = $route->getClass();
+		$query = new Query();
+		// $query->execute(
+		//     "INSERT INTO forms (title, content) VALUES (?, ?)",
+		//     [$post['form']['title'], $post['form']['content']]
+		// );
 
-		if (!class_exists($class)) {
-			throw new \Exception('Controller class does not exists');
-		}
+		$query->execute(
+			"INSERT INTO forms (title, content) VALUES (:title, :content)",
+			$post['form']
+		);
 
-		return new $class;
+		$id = $query->getLastInsertId();
+
+		return new RedirectView('/forms/view?id=' . $id);
 	}
 
-	protected function resolveControllerAction(RouteInterface $route, $controller)
+	public function delete($params)
 	{
-		$action = $route->getAction();
-
-		if (!method_exists($controller, $action)) {
-			throw new \Exception('Action does not exists');
-		}
-
-		return $action;
-	}
-
-	protected function runControllerAction($controller, $action, RequestInterface $request)
-	{
-		$params = $request->getQueryParams();
-		$postData = $request->getPostData();
-
-		return $controller->$action($params, $postData);
-	}
-
-	protected function render($result)
-	{
-		if ($result instanceof ViewInterface) {
-			$result->render();
-		} elseif (is_string($result)) {
-			echo $result;
-		} else {
-			throw new \Exception('Unsuported type');
-		}
+		(new Query)->execute("DELETE FROM forms WHERE id = ?", [$params['id']]);
+		return new RedirectView('/forms');
 	}
 }
